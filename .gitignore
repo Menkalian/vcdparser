@@ -1,0 +1,6 @@
+/.venv
+/dist
+/.idea
+*.iml
+
+/src/vcdparser.egg-info
