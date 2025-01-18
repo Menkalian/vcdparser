@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools"]
+
+[project]
+name = "vcdparser"
+version = "0.1.0"
+description = ""
+readme = "README.md"
+license = { file = "LICENSE" }
+
+keywords = ["vcd", "parser"]
+classifiers = [
+    "Programming Language :: Python :: 3"
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/menkalian/vcdparser"
+Repository = "https://github.com/menkalian/vcdparser"
+
+[project.entry-points."demo"]
+demo = "vcdparser.parser"
