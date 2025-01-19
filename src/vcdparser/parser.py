@@ -1,11 +1,8 @@
-#!/usr/bin/python3
-#
 import enum
-import sys, os
+import sys
 import time
 from collections import deque
-from time import sleep
-from typing import Optional, List, Dict, Deque
+from typing import Optional, List, Dict, Deque, Union
 
 
 class VcdVarType(enum.Enum):
@@ -86,18 +83,36 @@ class VcdScope:
 
         return None
 
+    def get_name(self, var_id):
+        if var_id in self.variables:
+            return self.variables[var_id].name
+
+        for subscope in self.subscopes:
+            name = subscope.get_name(var_id)
+            if name is not None:
+                return name
+
+        return None
+
 
 class VcdMetadata:
     def __init__(self):
         self.date: Optional[str] = None
         self.version: Optional[str] = None
+        self.comment: Optional[str] = None
         self.timescale: Optional[str] = None
         self.root: VcdScope = VcdScope("", "<ROOT>")
 
     def __str__(self):
-        string = f"Date: {self.date}\n"
-        string += f"Version: {self.version}\n"
-        string += f"Timescale: {self.timescale}\n"
+        string = ""
+        if self.date is not None:
+            string += f"Date: {self.date}\n"
+        if self.version is not None:
+            string += f"Version: {self.version}\n"
+        if self.comment is not None:
+            string += f"Comment: {self.comment}\n"
+        if self.timescale is not None:
+            string += f"Timescale: {self.timescale}\n"
         string += "\n"
         string += f"{self.root.format_str()}"
         return string
@@ -106,8 +121,7 @@ class VcdMetadata:
 class VcdTimestep:
     def __init__(self, timestamp: int):
         self.timestamp = timestamp
-        # self.variables: Dict[str, List[VcdVarValue]] = {}
-        self.variables: Dict[str, str] = {}
+        self.variables: Dict[str, Union[str, List[VcdVarValue]]] = {}
 
 
 class Vcd:
@@ -123,13 +137,20 @@ class Vcd:
     def get_id(self, varname: str) -> str:
         return self.metadata.root.get_id(varname)
 
+    def get_name(self, var_id: str) -> str:
+        return self.metadata.root.get_name(var_id)
+
     def print_var_changes(self, varname: str):
         id = vcd.get_id(varname)
         for t in vcd.timesteps:
             if id in t.variables:
                 print(f"{t.timestamp} - Signal for {varname} changed to {t.variables[id]}")
 
-def parse_vcd_file(filename: str, filter_var_names: Optional[List[str]] = None) -> Vcd:
+
+def parse_vcd_file(filename: str,
+                   filter_var_names: Optional[List[str]] = None,
+                   full_timestep_state: bool = False,
+                   parse_values: bool = False) -> Vcd:
     line_no = 0
     try:
         with (open(filename, "rt", buffering=1) as vcd_file):
@@ -157,8 +178,9 @@ def parse_vcd_file(filename: str, filter_var_names: Optional[List[str]] = None) 
 
                     previous_timestep = current_timestep
                     current_timestep = VcdTimestep(int(line[1:].strip()))
-                    # Uncomment this line to have the full value range in each timestep
-                    # current_timestep.variables = previous_timestep.variables.copy()
+                    # Copy old state, so each timestep contains all signals
+                    if full_timestep_state:
+                        current_timestep.variables = previous_timestep.variables.copy()
                     vcd.timesteps.append(current_timestep)
                     continue
                 if len(line) == 0:
@@ -177,6 +199,11 @@ def parse_vcd_file(filename: str, filter_var_names: Optional[List[str]] = None) 
                         metadata.version = metadata.version[8:-4].strip()
                         if metadata.version.strip() == "unknown":
                             metadata.version = None
+                        continue
+
+                    if line.startswith("$comment"):
+                        metadata.comment, read_lines = read_text_until_end_marker(line, vcd_file)
+                        metadata.comment = metadata.comment[8:-4].strip()
                         continue
 
                     if line.startswith("$timescale"):
@@ -223,7 +250,7 @@ def parse_vcd_file(filename: str, filter_var_names: Optional[List[str]] = None) 
                         var_lengths[variable.id] = variable.size
 
                     if line.startswith("$dumpvars"):
-                        current_timestep = VcdTimestep(0) # Initial timestep
+                        current_timestep = VcdTimestep(-1)  # Initial timestep
                         vcd.timesteps.append(current_timestep)
                         while line := vcd_file.readline():
                             line_no += 1
@@ -236,11 +263,19 @@ def parse_vcd_file(filename: str, filter_var_names: Optional[List[str]] = None) 
                             if id not in var_lengths:
                                 continue
                             elif var_lengths[id] > 1:
-                                # current_timestep.variables[id] = list(map(parse_value, list(line[1:var_lengths[id]])))
-                                current_timestep.variables[id] = line[1:var_lengths[id]]
+                                line_len = len(line)
+                                if parse_values and (line[0] == 'b' or line[0] == 'B'):
+                                    # Hack :)
+                                    if line_len < var_lengths[id] + 3:
+                                        line = line[0] + "0" * ((var_lengths[id] + 3) - line_len) + line[1:]
+                                    current_timestep.variables[id] = list(map(parse_value, list(line[1:var_lengths[id]])))
+                                else:
+                                    current_timestep.variables[id] = line[1:min(var_lengths[id], line_len - 2)]
                             else:
-                                # current_timestep.variables[id] = [parse_value(line[0])]
-                                current_timestep.variables[id] = line[0]
+                                if parse_values:
+                                    current_timestep.variables[id] = [parse_value(line[0])]
+                                else:
+                                    current_timestep.variables[id] = line[0]
 
 
                 else:
@@ -250,11 +285,18 @@ def parse_vcd_file(filename: str, filter_var_names: Optional[List[str]] = None) 
                     if var_ids is not None and id not in var_ids:
                         continue
                     elif var_lengths[id] > 1:
-                        # current_timestep.variables[id] = list(map(parse_value, list(line[1:var_lengths[id]])))
-                        current_timestep.variables[id] = line[1:var_lengths[id]]
+                        if parse_values and (line[0] == 'b' or line[0] == 'B'):
+                            # Hack :)
+                            if len(line) < var_lengths[id] + 3:
+                                line = line[0] + "0" * ((var_lengths[id] + 3) - len(line)) + line[1:]
+                            current_timestep.variables[id] = list(map(parse_value, list(line[1:var_lengths[id]])))
+                        else:
+                            current_timestep.variables[id] = line[1:min(var_lengths[id], len(line) - 2)]
                     else:
-                        # current_timestep.variables[id] = [parse_value(line[0])]
-                        current_timestep.variables[id] = line[0]
+                        if parse_values:
+                            current_timestep.variables[id] = [parse_value(line[0])]
+                        else:
+                            current_timestep.variables[id] = line[0]
     except Exception as ex:
         raise Exception(f"Error parsing VCD file {filename} in line {line_no}") from ex
     return vcd
@@ -300,3 +342,13 @@ if __name__ == '__main__':
     print(vcd)
     print()
     print(f"Duration: {(after - before) * 1e-6} ms")
+
+    if len(vcd.timesteps) < 20:
+        print("Displaying all signal changes for short VCD-file (<20 timesteps)")
+        for timestep in vcd.timesteps:
+            for variable in timestep.variables:
+                if timestep.timestamp < 0:
+                    timetext = "initial"
+                else:
+                    timetext = str(timestep.timestamp)
+                print(f"{timetext}: {vcd.get_name(variable)} = {timestep.variables[variable]}")
