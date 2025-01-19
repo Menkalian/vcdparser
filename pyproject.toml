@@ -1,9 +1,12 @@
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools>=42", "setuptools-git-versioning"]
+
+[tool.setuptools-git-versioning]
+enabled = true
 
 [project]
 name = "vcdparser"
-version = "0.1.0"
+dynamic = ["version"]
 description = ""
 readme = "README.md"
 license = { file = "LICENSE" }
