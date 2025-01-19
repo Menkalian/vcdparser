@@ -2,13 +2,17 @@
 
 A simple VCD parser to access the contents of a VCD file in python.
 
+The goal is to provide an easy to use, lightweight parser for VCD files.
+The parser also aims to be quite fast (for a python library 😉).
+
 ## What does it do?
 
 This library contains a simple parser, which reads in VCD files and provides you with the raw data from this file.
 
 ## How to use
 
-TODO: Get on PyPI
+To install the latest version from PyPI use `pip install vcdparser`.
+After that you can import the parser using `import vcdparser.parser`.
 
 This is a simple script showing you how to parse a file and get the first 10 changes of a signal named `"CLK"`:
 
