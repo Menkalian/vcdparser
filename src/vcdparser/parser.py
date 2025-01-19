@@ -279,17 +279,24 @@ def read_text_until_end_marker(line, vcd_file):
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:
-        print('Usage: python3 script.py <filename>')
+        print('Usage: python3 -m vcdparser.parser <vcd_file>')
         sys.exit(1)
 
+    print("""
+                  __                         
+     _  _________/ /__  ___ ________ ___ ____
+    | |/ / __/ _  / _ \/ _ `/ __(_-</ -_) __/
+    |___/\__/\_,_/ .__/\_,_/_/ /___/\__/_/   
+                /_/                          
+    """)
     filename = sys.argv[1]
+    print(f"Parsing VCD file {filename}...")
     before = time.monotonic_ns()
-    vcd = parse_vcd_file(filename, ["ACT_n"])
+    vcd = parse_vcd_file(filename)
     after = time.monotonic_ns()
-    print(f"Start parsing VCD file {before}")
-    print(f"Finish parsing VCD file {after}")
+    print("vcdparser-DEMO finished")
+    print()
+    print("VCD-Contents (abbreviated):")
     print(vcd)
-    print(f"Duration: {after - before} ns")
-
-    sleep(10)
-    #vcd.print_var_changes("ACT_n")
+    print()
+    print(f"Duration: {(after - before) * 1e-6} ms")
